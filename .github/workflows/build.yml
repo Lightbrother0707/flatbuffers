@@ -19,7 +19,7 @@ on:
 jobs:
   build-linux:
     permissions:
-      contents: write
+      contents: read
     outputs:
       digests-gcc: ${{ steps.hash-gcc.outputs.hashes }}
       digests-clang: ${{ steps.hash-clang.outputs.hashes }}
@@ -50,11 +50,12 @@ jobs:
     - name: Zip file
       if: startsWith(github.ref, 'refs/tags/')
       run: zip Linux.flatc.binary.${{ matrix.cxx }}.zip flatc
-    - name: Release zip file
-      uses: softprops/action-gh-release@v2
+    - name: Upload release zip artifact
+      uses: actions/upload-artifact@v7
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: Linux.flatc.binary.${{ matrix.cxx }}.zip
+        name: release-linux-${{ matrix.cxx }}
+        path: Linux.flatc.binary.${{ matrix.cxx }}.zip
     - name: Generate SLSA subjects - clang
       if: matrix.cxx == 'clang++-18' && startsWith(github.ref, 'refs/tags/')
       id: hash-clang
@@ -154,7 +155,7 @@ jobs:
 
   build-windows:
     permissions:
-      contents: write
+      contents: read
     outputs:
       digests: ${{ steps.hash.outputs.hashes }}
     name: Build Windows 2022
@@ -178,11 +179,12 @@ jobs:
     - name: Zip file
       if: startsWith(github.ref, 'refs/tags/')
       run: move Release/flatc.exe . && Compress-Archive flatc.exe Windows.flatc.binary.zip
-    - name: Release binary
-      uses: softprops/action-gh-release@v2
+    - name: Upload release zip artifact
+      uses: actions/upload-artifact@v7
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: Windows.flatc.binary.zip
+        name: release-windows
+        path: Windows.flatc.binary.zip
     - name: Generate SLSA subjects
       if: startsWith(github.ref, 'refs/tags/')
       id: hash
@@ -223,7 +225,7 @@ jobs:
 
   build-mac-intel:
     permissions:
-      contents: write
+      contents: read
     outputs:
       digests: ${{ steps.hash.outputs.hashes }}
     name: Build Mac (for Intel)
@@ -254,11 +256,12 @@ jobs:
     - name: Zip file
       if: startsWith(github.ref, 'refs/tags/')
       run: mv Release/flatc . && zip MacIntel.flatc.binary.zip flatc
-    - name: Release binary
-      uses: softprops/action-gh-release@v2
+    - name: Upload release zip artifact
+      uses: actions/upload-artifact@v7
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: MacIntel.flatc.binary.zip
+        name: release-mac-intel
+        path: MacIntel.flatc.binary.zip
     - name: Generate SLSA subjects
       if: startsWith(github.ref, 'refs/tags/')
       id: hash
@@ -266,7 +269,7 @@ jobs:
 
   build-mac-universal:
     permissions:
-      contents: write
+      contents: read
     outputs:
       digests: ${{ steps.hash.outputs.hashes }}
     name: Build Mac (universal build)
@@ -297,11 +300,12 @@ jobs:
     - name: Zip file
       if: startsWith(github.ref, 'refs/tags/')
       run: mv Release/flatc . && zip Mac.flatc.binary.zip flatc
-    - name: Release binary
-      uses: softprops/action-gh-release@v2
+    - name: Upload release zip artifact
+      uses: actions/upload-artifact@v7
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: Mac.flatc.binary.zip
+        name: release-mac-universal
+        path: Mac.flatc.binary.zip
     - name: Generate SLSA subjects
       if: startsWith(github.ref, 'refs/tags/')
       id: hash
@@ -629,6 +633,24 @@ jobs:
           echo "$MACINTEL_DIGESTS" | base64 -d >> checksums.txt
           echo "$WINDOWS_DIGESTS" | base64 -d >> checksums.txt
           echo "digests=$(cat checksums.txt | base64 -w0)" >> $GITHUB_OUTPUT
+
+  release-binaries:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-linux, build-windows, build-mac-intel, build-mac-universal]
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*.zip
 
   provenance:
     if: startsWith(github.ref, 'refs/tags/')
